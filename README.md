@@ -1,129 +1,139 @@
 # nix-add
 
-A small CLI utility for NixOS that lets you **look up and add packages to `configuration.nix`** using simple commands like `add kitty`.
+A small CLI helper for NixOS that lets you add packages to
+`configuration.nix` without opening an editor every time.
 
-The tool verifies that packages exist in Nix, handles typos interactively, updates your system configuration, and rebuilds automatically.
+Instead of manually editing your config and rebuilding, you can just run:
+```bash
+add kitty
+```
+The tool checks if the package exists, handles typos, updates your config,
+and runs nixos-rebuild switch for you.
 
----
+Features
 
-## Features
+- Add packages to environment.systemPackages
 
-- Add packages to `environment.systemPackages`
-- Look up packages in Nix without modifying your system
+- Look up packages in Nix without changing anything
+
 - Lookup + add in a single command
+
 - Interactive typo correction with suggestions
-- Optional non-interactive mode with `--yes`
+
+- Optional non-interactive mode with --yes
+
 - Multiple packages in one command
+
 - Colorized terminal output
+
 - Summary table showing what happened
-- Automatic backup of `configuration.nix`
 
----
+- Automatic backup of configuration.nix
 
-## Installation
-
-1. Create a bin directory if you don’t already have one:
-
+Installation
+1. Create a bin directory (if you don’t already have one)
 ```bash
 mkdir -p ~/bin
-Save the script as add:
+```
+2. Save the script
+Open a new file called add:
 
-bash
-Copy code
+```bash
 nano ~/bin/add
-Paste the script and save.
+```
+Paste the script into the file and save it.
 
-Make it executable:
-
-bash
-Copy code
+3. Make it executable
+```bash
 chmod +x ~/bin/add
-Ensure ~/bin is in your PATH:
+```
+4. Make sure ~/bin is in your PATH
+For the current session:
 
-bash
-Copy code
+```bash
 export PATH="$HOME/bin:$PATH"
-(Optional, recommended) Persist it:
+```
+To make it permanent (recommended):
 
-bash
-Copy code
+```bash
 echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
-Commands
-Add packages
-bash
-Copy code
+```
+Usage
+Add a package
+```bash
 add kitty
+```
+Shortcut version:
+
+```bash
 + kitty
-Adds the package to configuration.nix and runs:
+```
+This adds kitty to environment.systemPackages and runs:
 
-bash
-Copy code
+```bash
 sudo nixos-rebuild switch
-Lookup packages (no changes)
-bash
-Copy code
+```
+Look up a package (no changes)
+```bash
 lkp neovim
-Checks whether the package exists in Nix channels.
+```
+Checks whether the package exists in Nix channels, but does not modify
+your configuration.
 
-Lookup + add
-bash
-Copy code
+Look up and add
+```bash
 add lkp neovim
-Verifies the package exists
+```
+Confirms the package exists
 
 Adds it to configuration.nix
 
 Rebuilds the system
 
-Handle typos interactively
-bash
-Copy code
+Typo handling
+```bash
 add lkp neovimm
-If the package doesn’t exist, you’ll be prompted with suggestions:
+```
+If a package doesn’t exist, you’ll be prompted with suggestions:
 
-sql
-Copy code
+```bash
 Did you mean:
   1) neovim
   2) neovim-qt
   0) Skip
-Auto-select suggestions (non-interactive)
-bash
-Copy code
+```
+Non-interactive mode
+```bash
 add lkp neovimm --yes
-Automatically selects the closest match. Useful for scripts.
+```
+Automatically selects the closest match. Useful for scripts or batch installs.
 
 Multiple packages
-bash
-Copy code
+```bash
 add neovim kitty htop
 add lkp neovimm kitty htop
+```
 All packages are processed in one run.
 
-Output Summary
-At the end of each run, a summary table is shown:
+Summary Output
+After running, you’ll see a summary like this:
 
-pgsql
-Copy code
+```bash
 Package              Status       Action Taken
 --------------------------------------------------
 neovimm              NOT FOUND    [SELECTED] neovim
 kitty                FOUND        Added
 htop                 FOUND        Added
-Safety
+```
+This makes it easy to see what was added, skipped, or corrected.
+
+Safety Notes
 Your configuration.nix is backed up automatically as:
 
-pgsql
-Copy code
+```bash
 configuration.nix.bak
+```
 Existing packages are not duplicated
 
 Missing packages can be skipped safely
-
-Requirements
-NixOS
-
-nix command available
-
-Standard environment.systemPackages = [ ... ]; layout
