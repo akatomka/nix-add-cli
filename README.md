@@ -31,33 +31,10 @@ Features
 - Automatic backup of configuration.nix
 
 Installation
-1. Create a bin directory (if you don’t already have one)
 ```bash
-mkdir -p ~/bin
-```
-2. Save the script
-Open a new file called add:
-
-```bash
-nano ~/bin/add
-```
-Paste the script into the file and save it.
-
-3. Make it executable
-```bash
-chmod +x ~/bin/add
-```
-4. Make sure ~/bin is in your PATH
-For the current session:
-
-```bash
-export PATH="$HOME/bin:$PATH"
-```
-To make it permanent (recommended):
-
-```bash
-echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
-source ~/.bashrc
+git clone https://github.com/akatomka/nix-add-cli.git
+cd nix-add-cli
+python3 nixaddlkp.py
 ```
 Usage
 Add a package
