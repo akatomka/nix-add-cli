@@ -1,0 +1,181 @@
+#!/usr/bin/env python3
+import subprocess
+import sys
+import os
+import re
+from difflib import get_close_matches
+
+CONFIG_FILE = os.path.expanduser("~/.config/nixpkgs/configuration.nix")
+
+# ANSI color codes
+GREEN = "\033[92m"
+YELLOW = "\033[93m"
+RED = "\033[91m"
+RESET = "\033[0m"
+
+def cprint(msg, color):
+    print(f"{color}{msg}{RESET}")
+
+def nix_search(package):
+    """Return list of package names from nix search"""
+    try:
+        result = subprocess.run(
+            ["nix", "search", package],
+            capture_output=True, text=True, check=True
+        )
+        return [line.split()[0] for line in result.stdout.splitlines()]
+    except subprocess.CalledProcessError:
+        return []
+
+def nix_exists(package):
+    """Check if package exists in nix channels"""
+    return package in nix_search(package)
+
+def suggest_package(package):
+    """Suggest closest package names from nix channels"""
+    all_matches = nix_search("")  # search all packages
+    close = get_close_matches(package, all_matches, n=3, cutoff=0.6)
+    return close
+
+def interactive_choose(pkg, auto_yes=False):
+    """If package doesn't exist, ask user to select a suggestion"""
+    suggestions = suggest_package(pkg)
+    if not suggestions:
+        return None, "[SKIP] No suggestions"
+
+    if auto_yes:
+        return suggestions[0], f"[AUTO] Selected {suggestions[0]}"
+
+    cprint(f"[WARNING] '{pkg}' does NOT exist in Nix channels.", YELLOW)
+    print("Did you mean:")
+    for idx, s in enumerate(suggestions, 1):
+        print(f"  {idx}) {s}")
+    print("  0) Skip this package")
+
+    while True:
+        choice = input("Choose a number (0 to skip): ").strip()
+        if choice.isdigit():
+            choice = int(choice)
+            if 0 <= choice <= len(suggestions):
+                break
+        print("Invalid input. Enter a number corresponding to the options above.")
+
+    if choice == 0:
+        return None, "[SKIP] User skipped"
+    else:
+        return suggestions[choice - 1], f"[SELECTED] {suggestions[choice - 1]}"
+
+def lookup_packages(packages):
+    """Check if packages exist and print message with suggestions"""
+    for pkg in packages:
+        if nix_exists(pkg):
+            cprint(f"[FOUND] {pkg} exists in Nix channels.", GREEN)
+        else:
+            suggestion = suggest_package(pkg)
+            msg = f"[NOT FOUND] {pkg} does NOT exist in Nix channels."
+            if suggestion:
+                msg += f" Did you mean: {', '.join(suggestion)}?"
+            cprint(msg, YELLOW)
+
+def add_packages(packages, auto_yes=False):
+    """Add packages to configuration.nix and rebuild"""
+    # Track package actions for summary
+    summary = []
+
+    # Backup configuration.nix
+    backup_file = CONFIG_FILE + ".bak"
+    os.rename(CONFIG_FILE, backup_file)
+    cprint(f"Backup created: {backup_file}", GREEN)
+
+    # Read configuration.nix
+    with open(backup_file, "r") as f:
+        content = f.read()
+
+    # Regex to find environment.systemPackages block
+    pattern = re.compile(
+        r"(environment\.systemPackages\s*=\s*\[)(.*?)(\];)",
+        re.DOTALL
+    )
+    match = pattern.search(content)
+    if not match:
+        cprint("Error: Could not find environment.systemPackages in configuration.nix", RED)
+        sys.exit(1)
+
+    packages_block = match.group(2).strip()
+    existing_packages = [p.strip() for p in packages_block.splitlines() if p.strip()]
+
+    # Filter and handle missing packages
+    final_packages = []
+    for pkg in packages:
+        if pkg in existing_packages:
+            summary.append((pkg, "FOUND", "Already in config"))
+        elif not nix_exists(pkg):
+            chosen, action = interactive_choose(pkg, auto_yes)
+            if chosen:
+                final_packages.append(chosen)
+                summary.append((pkg, "NOT FOUND", action))
+            else:
+                summary.append((pkg, "NOT FOUND", action))
+        else:
+            final_packages.append(pkg)
+            summary.append((pkg, "FOUND", "Added"))
+
+    if not final_packages:
+        cprint("No new packages to add. Exiting.", RED)
+        print_summary(summary)
+        return
+
+    all_packages = existing_packages + final_packages
+    new_block = pattern.sub(
+        f"{match.group(1)}\n    " + "\n    ".join(all_packages) + "\n" + match.group(3),
+        content
+    )
+
+    # Write updated configuration.nix
+    with open(CONFIG_FILE, "w") as f:
+        f.write(new_block)
+
+    cprint(f"Added packages: {', '.join(final_packages)}", GREEN)
+    subprocess.run(["sudo", "nixos-rebuild", "switch"])
+    print_summary(summary)
+
+def print_summary(summary):
+    """Print a table summary of packages"""
+    print("\nPackage Summary:")
+    print(f"{'Package':<20} {'Status':<12} {'Action Taken'}")
+    print("-" * 50)
+    for pkg, status, action in summary:
+        color = GREEN if status == "FOUND" else YELLOW if status == "NOT FOUND" and "Selected" in action else RED
+        print(f"{pkg:<20} {color}{status:<12}{RESET} {action}")
+
+# --- Main ---
+if len(sys.argv) < 2:
+    print("Usage:")
+    print("  add <package> [package2 ...] [--yes]        # Add packages")
+    print("  + <package> [package2 ...] [--yes]          # Shortcut for add")
+    print("  lkp <package> [package2 ...]                # Lookup packages")
+    print("  add lkp <package> [package2 ...] [--yes]    # Lookup then add")
+    sys.exit(1)
+
+# Check for --yes flag
+auto_yes = False
+if "--yes" in sys.argv:
+    auto_yes = True
+    sys.argv.remove("--yes")
+
+cmd = sys.argv[1]
+
+if cmd in ["add", "+"]:
+    if len(sys.argv) >= 3 and sys.argv[2] == "lkp":
+        packages = sys.argv[3:]
+        lookup_packages(packages)
+        add_packages(packages, auto_yes)
+    else:
+        packages = sys.argv[2:]
+        add_packages(packages, auto_yes)
+elif cmd == "lkp":
+    packages = sys.argv[2:]
+    lookup_packages(packages)
+else:
+    cprint(f"Unknown command: {cmd}", RED)
+    sys.exit(1)
